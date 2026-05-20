@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import streamlit as st
 
+from src.config import get_config_status, load_dotenv_file, sync_mapping_to_environ
 from src.logging_store import append_chat_log, append_unanswered_question, update_helpfulness
 from src.openai_service import embed_texts, get_openai_settings
 from src.pdf_ingestion import ingest_pdf_bytes, sha256_bytes
@@ -72,18 +73,24 @@ st.markdown(
 
 
 def sync_streamlit_secrets() -> None:
-    for key in [
-        "SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY",
-        "OPENAI_API_KEY",
-        "OPENAI_CHAT_MODEL",
-        "ADMIN_PASSWORD",
-    ]:
-        try:
-            if key not in os.environ and key in st.secrets:
-                os.environ[key] = str(st.secrets[key])
-        except Exception:
-            return
+    try:
+        sync_mapping_to_environ(st.secrets)
+    except Exception:
+        return
+
+
+def status_label(value: bool) -> str:
+    return "configured" if value else "not configured"
+
+
+def render_connection_status(store: SupabaseStore) -> None:
+    status = get_config_status()
+    st.subheader("Connection Status")
+    st.write(f"Admin password: {status_label(status.admin_password)}")
+    st.write(f"Supabase credentials: {status_label(status.supabase)}")
+    st.write(f"Supabase client: {'connected' if store.enabled else 'not connected'}")
+    st.write(f"OpenAI API key: {status_label(status.openai)}")
+    st.write(f"Semantic search: {'active' if status.semantic_search and store.enabled else 'inactive'}")
 
 
 def init_state() -> None:
@@ -266,6 +273,7 @@ def render_admin_tab(store: SupabaseStore) -> None:
         "<div class='subtitle'>Upload approved SOP PDFs and publish them to the searchable knowledge base.</div>",
         unsafe_allow_html=True,
     )
+    render_connection_status(store)
 
     admin_password = os.getenv("ADMIN_PASSWORD")
     if not admin_password:
@@ -334,6 +342,7 @@ def render_admin_tab(store: SupabaseStore) -> None:
                 st.error(str(exc))
 
 
+load_dotenv_file(ROOT)
 sync_streamlit_secrets()
 init_state()
 store = SupabaseStore()
@@ -348,6 +357,7 @@ with admin_tab:
     render_admin_tab(store)
 
 with st.sidebar:
+    status = get_config_status()
     semantic_enabled = store.enabled and get_openai_settings() is not None
     st.header("Supervisor Snapshot")
     st.markdown(
@@ -355,6 +365,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.write(f"Loaded local SOP sections: {len(chunks)}")
-    st.write(f"Supabase: {'connected' if store.enabled else 'not configured'}")
-    st.write(f"OpenAI: {'configured' if get_openai_settings() else 'not configured'}")
+    st.write(f"Supabase: {'connected' if store.enabled else status_label(status.supabase)}")
+    st.write(f"OpenAI: {status_label(status.openai)}")
     st.write(f"Retrieval: {'semantic vector search' if semantic_enabled else 'local keyword fallback'}")

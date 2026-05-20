@@ -34,7 +34,21 @@ sudo apt-get install -y tesseract-ocr
 
 ## Configuration
 
-Set these in `.streamlit/secrets.toml` or environment variables:
+For local development, copy the example file and fill in your real values:
+
+```bash
+cp .env.example .env
+```
+
+```env
+ADMIN_PASSWORD=change-me
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_CHAT_MODEL=gpt-5.4-mini
+```
+
+The real `.env` file is ignored by git. You can also set the same values as environment variables or in `.streamlit/secrets.toml`:
 
 ```toml
 ADMIN_PASSWORD = "change-me"
@@ -46,7 +60,24 @@ OPENAI_CHAT_MODEL = "gpt-5.4-mini"
 
 `OPENAI_CHAT_MODEL` is optional. If missing, the app defaults to `gpt-5.4-mini`.
 
-Run the SQL in `supabase_schema.sql` in Supabase before publishing PDFs.
+### Supabase Setup
+
+1. Create or open your Supabase project.
+2. In Supabase, open the SQL Editor.
+3. Copy the full contents of `supabase_schema.sql`.
+4. Run the SQL. This creates the `documents`, `document_chunks`, `chat_logs`, `unanswered_questions` tables and the `match_document_chunks` RPC.
+5. In Supabase project settings, copy the Project URL into `SUPABASE_URL`.
+6. In API settings, copy the service role key into `SUPABASE_SERVICE_ROLE_KEY`.
+7. Restart Streamlit after changing `.env`.
+
+If a Supabase MCP tool is available in your Codex session later, it can be used to apply `supabase_schema.sql` and verify the database. In this session, no Supabase MCP tool is exposed, so the manual SQL Editor path is the reliable setup.
+
+### OpenAI API Access
+
+The app needs an `OPENAI_API_KEY` for embeddings and generated answers. A ChatGPT Plus/Pro/Business subscription cannot be used directly as an API key; OpenAI API billing is separate from ChatGPT subscriptions. See OpenAI's API pricing FAQ and help article:
+
+- https://openai.com/api/pricing/
+- https://help.openai.com/en/articles/8156019
 
 ## Try These Questions
 
