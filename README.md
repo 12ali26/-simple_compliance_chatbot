@@ -10,8 +10,9 @@ A mobile-friendly Streamlit chatbot that answers cleaning procedure questions fr
 - Markdown knowledge base in `knowledge_base/markdown/`
 - PDF text extraction with OCR fallback for scanned pages
 - Supabase + pgvector document/chunk storage
-- OpenAI embeddings and grounded answer generation
-- Local keyword fallback when Supabase/OpenAI are not configured
+- OpenRouter embeddings for semantic search, with OpenAI fallback
+- OpenRouter or OpenAI grounded answer generation
+- Local keyword fallback when Supabase/embeddings are not configured
 - Grounded fallback for unsupported questions
 - Chat, source, category, unanswered question, and helpfulness logging
 - Focused tests for retrieval and guardrails
@@ -43,8 +44,14 @@ cp .env.example .env
 ```env
 ADMIN_PASSWORD=change-me
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-OPENAI_API_KEY=your-openai-api-key
+SUPABASE_SECRET_KEY=your-sb-secret-key
+SUPABASE_SERVICE_ROLE_KEY=
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+OPENROUTER_SITE_URL=http://localhost:8501
+OPENROUTER_APP_NAME=Cleaning SOP Assistant
+OPENAI_API_KEY=
 OPENAI_CHAT_MODEL=gpt-5.4-mini
 ```
 
@@ -53,8 +60,15 @@ The real `.env` file is ignored by git. You can also set the same values as envi
 ```toml
 ADMIN_PASSWORD = "change-me"
 SUPABASE_URL = "https://your-project.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "your-service-role-key"
-OPENAI_API_KEY = "your-openai-key"
+SUPABASE_SECRET_KEY = "your-sb-secret-key"
+# Optional legacy fallback:
+SUPABASE_SERVICE_ROLE_KEY = ""
+OPENROUTER_API_KEY = "your-openrouter-api-key"
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
+OPENROUTER_EMBEDDING_MODEL = "openai/text-embedding-3-small"
+OPENROUTER_SITE_URL = "http://localhost:8501"
+OPENROUTER_APP_NAME = "Cleaning SOP Assistant"
+OPENAI_API_KEY = ""
 OPENAI_CHAT_MODEL = "gpt-5.4-mini"
 ```
 
@@ -67,14 +81,28 @@ OPENAI_CHAT_MODEL = "gpt-5.4-mini"
 3. Copy the full contents of `supabase_schema.sql`.
 4. Run the SQL. This creates the `documents`, `document_chunks`, `chat_logs`, `unanswered_questions` tables and the `match_document_chunks` RPC.
 5. In Supabase project settings, copy the Project URL into `SUPABASE_URL`.
-6. In API settings, copy the service role key into `SUPABASE_SERVICE_ROLE_KEY`.
-7. Restart Streamlit after changing `.env`.
+6. In API Keys, create/copy the backend secret key that starts with `sb_secret_` into `SUPABASE_SECRET_KEY`.
+7. If your project only shows legacy keys, copy the `service_role` key into `SUPABASE_SERVICE_ROLE_KEY` instead.
+8. Do not use the `sb_publishable_...` key for this Streamlit admin ingestion flow. It is for public/client-side access and is not enough for server-side document inserts/upserts.
+9. Restart Streamlit after changing `.env`.
 
 If a Supabase MCP tool is available in your Codex session later, it can be used to apply `supabase_schema.sql` and verify the database. In this session, no Supabase MCP tool is exposed, so the manual SQL Editor path is the reliable setup.
 
-### OpenAI API Access
+### OpenRouter Model And Embedding Access
 
-The app needs an `OPENAI_API_KEY` for embeddings and generated answers. A ChatGPT Plus/Pro/Business subscription cannot be used directly as an API key; OpenAI API billing is separate from ChatGPT subscriptions. See OpenAI's API pricing FAQ and help article:
+To use OpenRouter for answer generation and semantic retrieval, set:
+
+```env
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=openai/gpt-4o-mini
+OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+```
+
+OpenRouter is preferred for both answer generation and embeddings when `OPENROUTER_API_KEY` is present. The app sends chat requests to `https://openrouter.ai/api/v1/chat/completions` and embedding requests to `https://openrouter.ai/api/v1/embeddings`.
+
+### OpenAI API Fallback
+
+`OPENAI_API_KEY` is optional and only used as a fallback if OpenRouter is not configured. A ChatGPT Plus/Pro/Business subscription cannot be used directly as an API key; OpenAI API billing is separate from ChatGPT subscriptions. See OpenAI's API pricing FAQ and help article:
 
 - https://openai.com/api/pricing/
 - https://help.openai.com/en/articles/8156019
@@ -91,6 +119,7 @@ The app needs an `OPENAI_API_KEY` for embeddings and generated answers. A ChatGP
 
 Approved Markdown procedures live in `knowledge_base/markdown/`.
 Uploaded PDFs are stored unchanged in `knowledge_base/raw/`.
+The production knowledge base starts empty. Admins add approved procedures from the Admin tab by uploading PDFs.
 
 Each file can include:
 

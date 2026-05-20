@@ -7,11 +7,12 @@ from uuid import uuid4
 
 import streamlit as st
 
-from src.config import get_config_status, load_dotenv_file, sync_mapping_to_environ
+from src.config import get_config_status, is_real_value, load_dotenv_file, sync_mapping_to_environ
+from src.embedding_service import embed_texts, get_embedding_settings
+from src.intent_router import Intent, route_message
 from src.logging_store import append_chat_log, append_unanswered_question, update_helpfulness
-from src.openai_service import embed_texts, get_openai_settings
 from src.pdf_ingestion import ingest_pdf_bytes, sha256_bytes
-from src.rag_engine import answer_question_semantic
+from src.rag_engine import answer_question_local_model, answer_question_semantic
 from src.sop_engine import FALLBACK_RESPONSE, answer_question, load_knowledge_base
 from src.supabase_store import SupabaseStore
 
@@ -19,6 +20,14 @@ from src.supabase_store import SupabaseStore
 ROOT = Path(__file__).parent
 KNOWLEDGE_DIR = ROOT / "knowledge_base"
 DATA_DIR = ROOT / "data"
+
+
+class SimpleResponse:
+    def __init__(self, answer: str, category: str, reason: str):
+        self.answer = answer
+        self.sources = []
+        self.category = category
+        self.reason = reason
 
 
 st.set_page_config(
@@ -85,11 +94,14 @@ def status_label(value: bool) -> str:
 
 def render_connection_status(store: SupabaseStore) -> None:
     status = get_config_status()
+    embedding_settings = get_embedding_settings()
     st.subheader("Connection Status")
     st.write(f"Admin password: {status_label(status.admin_password)}")
     st.write(f"Supabase credentials: {status_label(status.supabase)}")
     st.write(f"Supabase client: {'connected' if store.enabled else 'not connected'}")
-    st.write(f"OpenAI API key: {status_label(status.openai)}")
+    st.write(f"Embedding provider: {embedding_settings.provider if embedding_settings else 'not configured'}")
+    st.write(f"OpenRouter API key: {status_label(status.openrouter)}")
+    st.write(f"Model access: {status_label(status.model_access)}")
     st.write(f"Semantic search: {'active' if status.semantic_search and store.enabled else 'inactive'}")
 
 
@@ -199,7 +211,10 @@ def save_unanswered(store: SupabaseStore, row: dict) -> None:
 
 
 def render_chat_tab(chunks, store: SupabaseStore) -> None:
-    semantic_enabled = store.enabled and get_openai_settings() is not None
+    status = get_config_status()
+    embedding_settings = get_embedding_settings()
+    semantic_enabled = store.enabled and embedding_settings is not None and status.model_access
+    local_model_enabled = (not semantic_enabled) and status.model_access
 
     st.title("Cleaning SOP Assistant")
     st.markdown(
@@ -207,9 +222,9 @@ def render_chat_tab(chunks, store: SupabaseStore) -> None:
         unsafe_allow_html=True,
     )
 
-    if not semantic_enabled and not chunks:
-        st.error("No SOP documents were found. Upload a PDF or add Markdown files to knowledge_base/markdown.")
-        return
+    has_documents = bool(chunks) or semantic_enabled
+    if not has_documents:
+        st.warning("No approved SOP documents have been uploaded yet. Admins can add PDFs from the Admin tab.")
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -224,10 +239,23 @@ def render_chat_tab(chunks, store: SupabaseStore) -> None:
 
         with st.chat_message("assistant"):
             with st.spinner("Checking approved procedures..."):
-                if semantic_enabled:
-                    response = answer_question_semantic(prompt, store)
+                routed = route_message(prompt)
+                if routed.intent == Intent.CASUAL:
+                    response = SimpleResponse(routed.response, "casual", routed.reason)
+                elif routed.intent == Intent.UNSUPPORTED:
+                    response = SimpleResponse(routed.response, "unsupported", routed.reason)
+                elif not has_documents:
+                    response = SimpleResponse(
+                        "No approved SOP documents have been uploaded yet. Please ask an admin to upload the approved procedures.",
+                        "unavailable",
+                        "No approved SOP documents uploaded.",
+                    )
+                elif semantic_enabled:
+                    response = answer_question_semantic(routed.search_query, store)
+                elif local_model_enabled:
+                    response = answer_question_local_model(routed.search_query, chunks)
                 else:
-                    response = answer_question(prompt, chunks)
+                    response = answer_question(routed.search_query, chunks)
 
             st.markdown(response.answer)
             render_sources(response.sources)
@@ -244,7 +272,7 @@ def render_chat_tab(chunks, store: SupabaseStore) -> None:
             }
             log_id = save_chat_log(store, row)
 
-            if response.answer == FALLBACK_RESPONSE:
+            if response.answer == FALLBACK_RESPONSE or row["category"] in {"unsupported", "unavailable"}:
                 save_unanswered(
                     store,
                     {
@@ -276,8 +304,8 @@ def render_admin_tab(store: SupabaseStore) -> None:
     render_connection_status(store)
 
     admin_password = os.getenv("ADMIN_PASSWORD")
-    if not admin_password:
-        st.warning("ADMIN_PASSWORD is not configured. Set it in Streamlit secrets or the environment.")
+    if not is_real_value(admin_password):
+        st.warning("ADMIN_PASSWORD is not configured. Set a real value in .env, Streamlit secrets, or the environment.")
         return
 
     if not st.session_state.admin_authenticated:
@@ -318,8 +346,8 @@ def render_admin_tab(store: SupabaseStore) -> None:
                     knowledge_dir=KNOWLEDGE_DIR,
                 )
 
-                supabase_status = "Skipped: Supabase/OpenAI not configured"
-                if store.enabled and get_openai_settings() is not None:
+                supabase_status = "Skipped: Supabase or embedding provider not configured"
+                if store.enabled and get_embedding_settings() is not None:
                     document_row = store.create_document(document)
                     embeddings = embed_texts([chunk.chunk_text for chunk in document.chunks])
                     chunk_count = store.replace_document_chunks(
@@ -358,7 +386,8 @@ with admin_tab:
 
 with st.sidebar:
     status = get_config_status()
-    semantic_enabled = store.enabled and get_openai_settings() is not None
+    embedding_settings = get_embedding_settings()
+    semantic_enabled = store.enabled and embedding_settings is not None and status.model_access
     st.header("Supervisor Snapshot")
     st.markdown(
         "<p class='small-note'>Logs use Supabase when configured, otherwise local CSV files.</p>",
@@ -366,5 +395,7 @@ with st.sidebar:
     )
     st.write(f"Loaded local SOP sections: {len(chunks)}")
     st.write(f"Supabase: {'connected' if store.enabled else status_label(status.supabase)}")
-    st.write(f"OpenAI: {status_label(status.openai)}")
+    st.write(f"Embeddings: {embedding_settings.provider if embedding_settings else 'not configured'}")
+    st.write(f"OpenRouter model: {status_label(status.openrouter)}")
+    st.write(f"Model access: {status_label(status.model_access)}")
     st.write(f"Retrieval: {'semantic vector search' if semantic_enabled else 'local keyword fallback'}")

@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from src.config import is_real_value
+
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_CHAT_MODEL = "gpt-5.4-mini"
@@ -17,7 +19,7 @@ class OpenAISettings:
 
 def get_openai_settings() -> OpenAISettings | None:
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not is_real_value(api_key):
         return None
     return OpenAISettings(
         api_key=api_key,
@@ -47,7 +49,7 @@ def embed_texts(texts: list[str], settings: OpenAISettings | None = None) -> lis
     return [item.embedding for item in response.data]
 
 
-def generate_grounded_answer(
+def generate_openai_grounded_answer(
     question: str,
     chunks: list[dict],
     settings: OpenAISettings | None = None,

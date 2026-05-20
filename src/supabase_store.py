@@ -7,20 +7,25 @@ from pathlib import Path
 from typing import Any
 
 from src.pdf_ingestion import IngestedDocument, MarkdownChunk
+from src.config import is_real_value
 
 
 @dataclass(frozen=True)
 class SupabaseSettings:
     url: str
-    service_role_key: str
+    backend_key: str
 
 
 def get_supabase_settings() -> SupabaseSettings | None:
     url = os.getenv("SUPABASE_URL")
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not service_role_key:
+    backend_key = os.getenv("SUPABASE_SECRET_KEY") or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if (
+        not is_real_value(url)
+        or not is_real_value(backend_key)
+        or str(backend_key).strip().lower().startswith("sb_publishable_")
+    ):
         return None
-    return SupabaseSettings(url=url, service_role_key=service_role_key)
+    return SupabaseSettings(url=url, backend_key=backend_key)
 
 
 def get_client(settings: SupabaseSettings | None = None):
@@ -31,7 +36,7 @@ def get_client(settings: SupabaseSettings | None = None):
         from supabase import create_client
     except ImportError as exc:
         raise RuntimeError("The supabase package is not installed.") from exc
-    return create_client(settings.url, settings.service_role_key)
+    return create_client(settings.url, settings.backend_key)
 
 
 class SupabaseStore:
