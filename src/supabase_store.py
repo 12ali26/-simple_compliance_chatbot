@@ -82,6 +82,32 @@ class SupabaseStore:
             raise RuntimeError("Supabase did not return the inserted document.")
         return response.data[0]
 
+    def list_documents(self, limit: int = 100) -> list[dict[str, Any]]:
+        if not self.enabled:
+            return []
+        response = (
+            self.client.table("documents")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    def update_document(self, document_id: str, updates: dict[str, Any]) -> None:
+        if not self.enabled:
+            return
+        allowed = {"title", "category", "source_name"}
+        payload = {key: value for key, value in updates.items() if key in allowed}
+        if not payload:
+            return
+        self.client.table("documents").update(payload).eq("id", document_id).execute()
+
+    def delete_document(self, document_id: str) -> None:
+        if not self.enabled:
+            return
+        self.client.table("documents").delete().eq("id", document_id).execute()
+
     def replace_document_chunks(
         self,
         document_id: str,
@@ -138,10 +164,44 @@ class SupabaseStore:
             return str(response.data[0].get("id", ""))
         return None
 
+    def list_chat_logs(self, limit: int = 100) -> list[dict[str, Any]]:
+        if not self.enabled:
+            return []
+        response = (
+            self.client.table("chat_logs")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    def delete_chat_log(self, log_id: str) -> None:
+        if not self.enabled:
+            return
+        self.client.table("chat_logs").delete().eq("id", log_id).execute()
+
     def append_unanswered_question(self, row: dict[str, Any]) -> None:
         if not self.enabled:
             return
         self.client.table("unanswered_questions").insert(row).execute()
+
+    def list_unanswered_questions(self, limit: int = 100) -> list[dict[str, Any]]:
+        if not self.enabled:
+            return []
+        response = (
+            self.client.table("unanswered_questions")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return response.data or []
+
+    def delete_unanswered_question(self, question_id: str) -> None:
+        if not self.enabled:
+            return
+        self.client.table("unanswered_questions").delete().eq("id", question_id).execute()
 
     def update_helpfulness(self, log_id: str, helpful: bool) -> None:
         if not self.enabled:

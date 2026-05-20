@@ -8,6 +8,7 @@ from src.supabase_store import get_supabase_settings
 
 CONFIG_ENV_KEYS = [
     "ADMIN_PASSWORD",
+    "STAFF_PASSWORD",
     "SUPABASE_URL",
     "SUPABASE_SECRET_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -32,6 +33,7 @@ def test_load_dotenv_file_sets_missing_values(tmp_path: Path, monkeypatch):
         "\n".join(
             [
                 "ADMIN_PASSWORD=secret",
+                "STAFF_PASSWORD=staff-secret",
                 "SUPABASE_URL=https://example.supabase.co",
                 "SUPABASE_SECRET_KEY=sb_secret_real",
                 "OPENAI_API_KEY=openai-key",
@@ -48,7 +50,9 @@ def test_load_dotenv_file_sets_missing_values(tmp_path: Path, monkeypatch):
 
     assert loaded is True
     assert os.environ["ADMIN_PASSWORD"] == "secret"
+    assert os.environ["STAFF_PASSWORD"] == "staff-secret"
     assert status.admin_password is True
+    assert status.staff_password is True
     assert status.supabase is True
     assert status.openai is True
     assert status.openrouter is True
@@ -72,6 +76,7 @@ def test_streamlit_secret_style_mapping_fills_missing_values(monkeypatch):
     sync_mapping_to_environ(
         {
             "ADMIN_PASSWORD": "from-secrets",
+            "STAFF_PASSWORD": "staff-from-secrets",
             "SUPABASE_URL": "https://example.supabase.co",
             "SUPABASE_SECRET_KEY": "sb_secret_from_secrets",
         }
@@ -79,7 +84,9 @@ def test_streamlit_secret_style_mapping_fills_missing_values(monkeypatch):
 
     status = get_config_status()
     assert os.environ["ADMIN_PASSWORD"] == "from-secrets"
+    assert os.environ["STAFF_PASSWORD"] == "staff-from-secrets"
     assert status.admin_password is True
+    assert status.staff_password is True
     assert status.supabase is True
     assert status.openai is False
     assert status.openrouter is False
@@ -90,6 +97,7 @@ def test_streamlit_secret_style_mapping_fills_missing_values(monkeypatch):
 def test_placeholders_do_not_count_as_configured(monkeypatch):
     clear_config(monkeypatch)
     monkeypatch.setenv("ADMIN_PASSWORD", "change-me")
+    monkeypatch.setenv("STAFF_PASSWORD", "your-staff-password")
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "PASTE_SUPABASE_SECRET_KEY_HERE")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "PASTE_SERVICE_ROLE_KEY_HERE")
@@ -99,6 +107,7 @@ def test_placeholders_do_not_count_as_configured(monkeypatch):
     status = get_config_status()
 
     assert status.admin_password is False
+    assert status.staff_password is False
     assert status.supabase is False
     assert status.openai is False
     assert status.openrouter is False

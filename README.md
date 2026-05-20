@@ -1,11 +1,12 @@
 # Cleaning SOP Assistant Chatbot MVP
 
-A mobile-friendly Streamlit chatbot that answers cleaning procedure questions from approved SOPs. Admins can upload PDF procedures, keep the raw PDF for reference, convert it to Obsidian-style Markdown, chunk it, and publish it to Supabase vector search.
+A mobile-friendly Streamlit chatbot that answers cleaning procedure questions from approved SOPs. Staff sign in for chat-only access, while supervisors/admins can upload and manage PDF procedures, review logs, keep the raw PDF for reference, convert it to Obsidian-style Markdown, chunk it, and publish it to Supabase vector search.
 
 ## What Is Included
 
 - Streamlit chat interface
-- Admin PDF upload with shared password gate
+- Two-password role login for staff chat access and supervisor/admin CRUD access
+- Admin PDF upload and document/log management
 - Raw PDF storage in `knowledge_base/raw/`
 - Markdown knowledge base in `knowledge_base/markdown/`
 - PDF text extraction with OCR fallback for scanned pages
@@ -25,6 +26,7 @@ streamlit run app.py --server.address 0.0.0.0 --server.port 8501
 ```
 
 Open the forwarded port or local URL shown by Streamlit.
+PDF uploads are configured up to 1024 MB in `.streamlit/config.toml`. Restart Streamlit after changing that limit.
 
 OCR requires the system `tesseract` executable. On Ubuntu/Debian:
 
@@ -43,6 +45,7 @@ cp .env.example .env
 
 ```env
 ADMIN_PASSWORD=change-me
+STAFF_PASSWORD=change-me
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SECRET_KEY=your-sb-secret-key
 SUPABASE_SERVICE_ROLE_KEY=
@@ -59,6 +62,7 @@ The real `.env` file is ignored by git. You can also set the same values as envi
 
 ```toml
 ADMIN_PASSWORD = "change-me"
+STAFF_PASSWORD = "change-me"
 SUPABASE_URL = "https://your-project.supabase.co"
 SUPABASE_SECRET_KEY = "your-sb-secret-key"
 # Optional legacy fallback:
@@ -119,7 +123,7 @@ OpenRouter is preferred for both answer generation and embeddings when `OPENROUT
 
 Approved Markdown procedures live in `knowledge_base/markdown/`.
 Uploaded PDFs are stored unchanged in `knowledge_base/raw/`.
-The production knowledge base starts empty. Admins add approved procedures from the Admin tab by uploading PDFs.
+The production knowledge base starts empty. Supervisors/admins add approved procedures from the Admin tab by uploading PDFs. Staff users only see the chat experience and answer source citations.
 
 Each file can include:
 
@@ -160,6 +164,7 @@ When Supabase is configured, logs are written to Supabase. Without Supabase, MVP
 - `data/unanswered_questions.csv`
 
 These files are created at runtime and can later be replaced with Supabase tables matching the PRD.
+Supervisors/admins can review and delete these records in the Admin tab.
 
 ## Tests
 

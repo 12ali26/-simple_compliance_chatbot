@@ -8,6 +8,7 @@ from typing import Mapping
 
 CONFIG_KEYS = [
     "ADMIN_PASSWORD",
+    "STAFF_PASSWORD",
     "SUPABASE_URL",
     "SUPABASE_SECRET_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -37,6 +38,7 @@ PLACEHOLDER_MARKERS = {
 @dataclass(frozen=True)
 class ConfigStatus:
     admin_password: bool
+    staff_password: bool
     supabase: bool
     openai: bool
     openrouter: bool
@@ -82,6 +84,7 @@ def get_config_status() -> ConfigStatus:
     model_access = openai or openrouter
     return ConfigStatus(
         admin_password=is_real_value(os.getenv("ADMIN_PASSWORD")),
+        staff_password=is_real_value(os.getenv("STAFF_PASSWORD")),
         supabase=supabase,
         openai=openai,
         openrouter=openrouter,

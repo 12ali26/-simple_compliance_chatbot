@@ -33,12 +33,53 @@ def append_chat_log(data_dir: Path, row: dict[str, str]) -> None:
         writer.writerow({field: row.get(field, "") for field in CHAT_LOG_FIELDS})
 
 
+def list_chat_logs(data_dir: Path) -> list[dict[str, str]]:
+    path = data_dir / "chat_logs.csv"
+    ensure_csv(path, CHAT_LOG_FIELDS)
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
 def append_unanswered_question(data_dir: Path, row: dict[str, str]) -> None:
     path = data_dir / "unanswered_questions.csv"
     ensure_csv(path, UNANSWERED_FIELDS)
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=UNANSWERED_FIELDS)
         writer.writerow({field: row.get(field, "") for field in UNANSWERED_FIELDS})
+
+
+def list_unanswered_questions(data_dir: Path) -> list[dict[str, str]]:
+    path = data_dir / "unanswered_questions.csv"
+    ensure_csv(path, UNANSWERED_FIELDS)
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle))
+
+
+def delete_chat_log(data_dir: Path, log_id: str) -> bool:
+    path = data_dir / "chat_logs.csv"
+    ensure_csv(path, CHAT_LOG_FIELDS)
+    return delete_csv_row(path, CHAT_LOG_FIELDS, log_id)
+
+
+def delete_unanswered_question(data_dir: Path, question_id: str) -> bool:
+    path = data_dir / "unanswered_questions.csv"
+    ensure_csv(path, UNANSWERED_FIELDS)
+    return delete_csv_row(path, UNANSWERED_FIELDS, question_id)
+
+
+def delete_csv_row(path: Path, fields: list[str], row_id: str) -> bool:
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    kept_rows = [row for row in rows if row.get("id") != row_id]
+    deleted = len(kept_rows) != len(rows)
+
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(kept_rows)
+
+    return deleted
 
 
 def update_helpfulness(data_dir: Path, log_id: str, helpful: bool) -> None:
