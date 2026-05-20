@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -40,12 +41,22 @@ SOP_TERMS = {
     "clean",
     "cleaning",
     "disinfect",
+    "doffing",
+    "donning",
     "floor",
+    "gown",
     "glove",
     "gloves",
+    "housekeeping",
     "isolation",
+    "mask",
     "mop",
     "ppe",
+    "ppes",
+    "procedure",
+    "procedures",
+    "room",
+    "steps",
     "spill",
     "toilet",
     "washroom",
@@ -149,8 +160,18 @@ def model_route(message: str) -> IntentResult | None:
 
 
 def route_message(message: str) -> IntentResult:
+    keyword_result = keyword_route(message)
+    if os.getenv("ENABLE_MODEL_ROUTER", "").strip().lower() not in {"1", "true", "yes"}:
+        return keyword_result
+
     try:
         model_result = model_route(message)
     except Exception:
         model_result = None
-    return model_result or keyword_route(message)
+    if model_result is None:
+        return keyword_result
+    if keyword_result.intent == Intent.UNSUPPORTED:
+        return keyword_result
+    if keyword_result.intent == Intent.SOP_QUESTION and model_result.intent == Intent.UNSUPPORTED:
+        return keyword_result
+    return model_result

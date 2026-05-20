@@ -21,8 +21,8 @@ from src.logging_store import (
     update_helpfulness,
 )
 from src.pdf_ingestion import ingest_pdf_bytes, sha256_bytes
-from src.rag_engine import answer_question_local_model, answer_question_semantic
-from src.sop_engine import FALLBACK_RESPONSE, answer_question, load_knowledge_base
+from src.rag_engine import answer_question_best_available
+from src.sop_engine import FALLBACK_RESPONSE, load_knowledge_base
 from src.supabase_store import SupabaseStore
 
 
@@ -365,7 +365,7 @@ def render_chat_tab(chunks, store: SupabaseStore) -> None:
     status = get_config_status()
     embedding_settings = get_embedding_settings()
     semantic_enabled = store.enabled and embedding_settings is not None and status.model_access
-    local_model_enabled = (not semantic_enabled) and status.model_access
+    model_enabled = status.model_access
 
     st.title("Cleaning SOP Assistant")
     st.markdown(
@@ -401,12 +401,14 @@ def render_chat_tab(chunks, store: SupabaseStore) -> None:
                         "unavailable",
                         "No approved SOP documents uploaded.",
                     )
-                elif semantic_enabled:
-                    response = answer_question_semantic(routed.search_query, store)
-                elif local_model_enabled:
-                    response = answer_question_local_model(routed.search_query, chunks)
                 else:
-                    response = answer_question(routed.search_query, chunks)
+                    response = answer_question_best_available(
+                        routed.search_query,
+                        chunks,
+                        store,
+                        semantic_enabled=semantic_enabled,
+                        model_enabled=model_enabled,
+                    )
 
             st.markdown(response.answer)
             render_sources(response.sources)
